@@ -1,40 +1,40 @@
-using System;
-using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace OES.Server {
     public class ClientManager {
-        private List<ClientWorker> workers = new List<ClientWorker>();
-        private int port;
-        private bool stop = false;
+        private List<ClientWorker> Workers = [];
+        private int WorkerIdCounter;
+        private int Port;
+        private bool Stop = false;
 
         public ClientManager(int port) {
-            this.port = port;
-            this.stop = false;
+            this.Port = port;
+            this.Stop = false;
         }
 
         public void Run() {
-            TcpListener serverSocket = null;
+            TcpListener? serverSocket = null; // creating a listener to initialise in try/catch
+
             try {
-                serverSocket = new TcpListener(IPAddress.Any, port);
-                serverSocket.Start();
+                serverSocket = new TcpListener(IPAddress.Any, Port); // initialising the listener to listen for incoming connections from any IP address that tries contacting on the given port
+                serverSocket.Start(); // start the listener
+
                 Console.WriteLine("[ClientManager] Server online");
 
-                while (!stop) {
+                // while shutdown has not been given, listen for incoming connections
+                while (!Stop) {
                     try {
-                        if (serverSocket.Pending()) {
-                            TcpClient connection = serverSocket.AcceptTcpClient();
-                            ClientWorker worker = new ClientWorker(this, connection);
-                            workers.Add(worker);
+                        if (serverSocket.Pending()) { // true if there is a connection waiting to connect
+                            TcpClient connection = serverSocket.AcceptTcpClient(); // initialises the pending connection as a client object
 
-                            //Starts ClientWorker on a new thread
-                            Task.Run(() => worker.Run());
+                            int workerId = ++this.WorkerIdCounter;
+                            ClientWorker worker = new(this, connection, workerId); // initialising a worker to handle the new connection, assigning the manager, the client and workerID
+                            Workers.Add(worker);
+
+                            Task.Run(() => worker.Run()); // starts ClientWorker on a new thread
                         } else {
-                            Thread.Sleep(100); //Small timeout to be able to check for pending
+                            Thread.Sleep(100); // small timeout before checking for pending connections again, so the server is not constantly checking
                         }
                     } catch (SocketException e) {
                         Console.Error.WriteLine("[ClientManager] Socket error: " + e.Message);
@@ -46,14 +46,12 @@ namespace OES.Server {
             } catch (IOException e) {
                 Console.Error.WriteLine("[ClientManager] I/O error: " + e.Message);
             } finally {
-                if (serverSocket != null) {
-                    serverSocket.Stop();
-                }
+                serverSocket?.Stop(); // stop the listener again, once we want to shutdown
             }
         }
 
         public void Shutdown() {
-            stop = true;
+            Stop = true;
         }
     }
 }
